@@ -1,0 +1,138 @@
+name: Datos de prueba
+
+on:
+  push:
+    branches: [datos-prueba]
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pillow
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq xfsprogs btrfs-progs cryptsetup ewf-tools dosfstools
+      - name: Crear imágenes
+        shell: bash
+        run: |
+          set -x
+          O=$RUNNER_TEMP/lin; mkdir -p $O; python tests/make_samples.py $O
+          M=$RUNNER_TEMP/mnt; mkdir -p $M
+          fill() {  # copia muestras y borra 4
+            sudo mkdir -p $M/Documentos/Sub
+            for f in $O/muestras/*; do b=$(basename "$f"); case "$b" in *.jpg) sudo cp "$f" "$M/Documentos/Sub/$b";; *) sudo cp "$f" "$M/Documentos/$b";; esac; done
+            sync; sudo rm -f $M/Documentos/Sub/foto_1.jpg $M/Documentos/informe.pdf "$M/Documentos/Carta muy larga para la abuela.docx" $M/Documentos/grafico.png; sync
+          }
+          truncate -s 320M $O/xfs.img; mkfs.xfs -q $O/xfs.img; sudo mount -o loop $O/xfs.img $M; fill; sudo umount $M
+          truncate -s 160M $O/btrfs.img; mkfs.btrfs -q $O/btrfs.img; sudo mount -o loop $O/btrfs.img $M; fill; sudo umount $M
+          for t in luks1 luks2; do
+            truncate -s 64M $O/$t.img
+            echo -n "clave123" | sudo cryptsetup luksFormat -q --type $t --iter-time 200 $O/$t.img -
+            echo -n "clave123" | sudo cryptsetup open $O/$t.img rd$t -
+            sudo mkfs.ext4 -q /dev/mapper/rd$t; sudo mount /dev/mapper/rd$t $M; fill; sudo umount $M; sudo cryptsetup close rd$t
+          done
+          truncate -s 64M $O/fat.img; mkfs.fat -F 32 $O/fat.img
+          ewfacquire -u -t $O/fat -f encase6 -c deflate:fast $O/fat.img || true
+          ls -la $O
+          cd $O && zip -q -r $RUNNER_TEMP/datos-linux.zip *.img *.E01 hashes.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: datos-prueba-linux
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          name: Datos de prueba (Linux)
+          files: ${{ runner.temp }}/datos-linux.zip
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pillow
+      - name: Crear imágenes APFS y HFS+
+        shell: bash
+        run: |
+          set -x
+          O=$RUNNER_TEMP/mac; mkdir -p $O; python tests/make_samples.py $O
+          fill() {
+            M="$1"; mkdir -p "$M/Documentos/Sub"
+            for f in $O/muestras/*; do b=$(basename "$f"); case "$b" in *.jpg) cp "$f" "$M/Documentos/Sub/$b";; *) cp "$f" "$M/Documentos/$b";; esac; done
+            sync; rm -f "$M/Documentos/Sub/foto_1.jpg" "$M/Documentos/informe.pdf" "$M/Documentos/Carta muy larga para la abuela.docx" "$M/Documentos/grafico.png"; sync
+          }
+          hdiutil create -size 64m -fs HFS+ -volname PruebaHFS -layout GPTSPUD $O/hfs.dmg
+          hdiutil attach -nobrowse $O/hfs.dmg; fill /Volumes/PruebaHFS; hdiutil detach /Volumes/PruebaHFS
+          hdiutil convert $O/hfs.dmg -format UDTO -o $O/hfs
+          hdiutil create -size 200m -fs APFS -volname PruebaAPFS -layout GPTSPUD $O/apfs.dmg
+          hdiutil attach -nobrowse $O/apfs.dmg
+          fill /Volumes/PruebaAPFS
+          C=$(diskutil info -plist /Volumes/PruebaAPFS | plutil -extract APFSContainerReference raw -)
+          diskutil apfs addVolume $C APFS Secreto -passphrase clave123 || echo "::warning::no se pudo crear el volumen cifrado"
+          sleep 3; ls /Volumes
+          [ -d /Volumes/Secreto ] && fill /Volumes/Secreto
+          diskutil apfs list > $O/apfs_list.txt || true
+          hdiutil detach /Volumes/PruebaAPFS -force || true
+          hdiutil detach $(echo $C | sed 's/s[0-9]*$//') -force || true
+          sleep 2; hdiutil info
+          for d in $(hdiutil info | awk '/^\/dev\/disk[0-9]+\t/ {print $1}'); do hdiutil detach $d -force || true; done
+          hdiutil convert $O/apfs.dmg -format UDTO -o $O/apfs
+          ls -la $O
+          cd $O && zip -q -r $RUNNER_TEMP/datos-macos.zip hfs.cdr apfs.cdr apfs_list.txt hashes.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: datos-prueba-macos
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          name: Datos de prueba (macOS)
+          files: ${{ runner.temp }}/datos-macos.zip
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pillow
+      - name: Crear imágenes ReFS y BitLocker
+        shell: pwsh
+        run: |
+          $O = "$env:RUNNER_TEMP\win"; New-Item -ItemType Directory -Force $O | Out-Null
+          python tests/make_samples.py $O
+          function Fill($root) {
+            New-Item -ItemType Directory -Force "$root\Documentos\Sub" | Out-Null
+            Get-ChildItem "$O\muestras" | ForEach-Object {
+              if ($_.Extension -eq ".jpg") { Copy-Item $_.FullName "$root\Documentos\Sub\" } else { Copy-Item $_.FullName "$root\Documentos\" } }
+            Start-Sleep 2
+            Remove-Item "$root\Documentos\Sub\foto_1.jpg","$root\Documentos\informe.pdf","$root\Documentos\Carta muy larga para la abuela.docx","$root\Documentos\grafico.png"
+            Start-Sleep 2
+          }
+          function MakeVhd($path, $size, $fs, $letter) {
+            "create vdisk file=`"$path`" maximum=$size type=fixed`nselect vdisk file=`"$path`"`nattach vdisk`ncreate partition primary`nformat fs=$fs quick label=Prueba`nassign letter=$letter" | Set-Content "$O\dp.txt"
+            diskpart /s "$O\dp.txt"
+          }
+          function Detach($path) { "select vdisk file=`"$path`"`ndetach vdisk" | Set-Content "$O\dp2.txt"; diskpart /s "$O\dp2.txt" }
+          MakeVhd "$O\refs.vhd" 2048 refs R
+          Fill "R:"; Detach "$O\refs.vhd"
+          MakeVhd "$O\bitlocker.vhd" 512 ntfs B
+          try {
+            $pw = ConvertTo-SecureString "Clave12345!" -AsPlainText -Force
+            Enable-BitLocker -MountPoint "B:" -PasswordProtector -Password $pw -EncryptionMethod XtsAes128 -UsedSpaceOnly -SkipHardwareTest
+            $rp = Add-BitLockerKeyProtector -MountPoint "B:" -RecoveryPasswordProtector
+            (Get-BitLockerVolume B:).KeyProtector | Out-String | Set-Content "$O\bitlocker_claves.txt"
+            do { Start-Sleep 2; $v = Get-BitLockerVolume B: } while ($v.EncryptionPercentage -lt 100)
+            Fill "B:"
+          } catch { Write-Output "::warning::BitLocker no disponible: $_"; manage-bde -status | Out-String | Set-Content "$O\bitlocker_claves.txt" }
+          Detach "$O\bitlocker.vhd"
+          Get-ChildItem $O
+          Compress-Archive -Path "$O\refs.vhd","$O\bitlocker.vhd","$O\bitlocker_claves.txt","$O\hashes.txt" -DestinationPath "$env:RUNNER_TEMP\datos-windows.zip"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: datos-prueba-windows
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          name: Datos de prueba (Windows)
+          files: ${{ runner.temp }}/datos-windows.zip
