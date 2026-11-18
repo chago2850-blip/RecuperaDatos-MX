@@ -31,3 +31,12 @@ libxkbcommon-x11-0
 thunar
 mousepad
 ristretto
+libxcb-icccm4
+libxcb-keysyms1
+libxcb-image0
+libxcb-render-util0
+libxcb-xkb1
+libxcb-randr0
+libxcb-shape0
+libxcb-xinerama0
+libpcre3

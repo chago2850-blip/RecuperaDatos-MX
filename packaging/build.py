@@ -126,7 +126,9 @@ def build_deb(root: str) -> str:
     os.makedirs(os.path.join(deb_root, "DEBIAN"))
     ctrl = (f"Package: {PKG}\nVersion: {__version__}\nSection: utils\nPriority: optional\nArchitecture: {arch}\n"
             f"Maintainer: Santiago Miguel <chago2850@gmail.com>\nInstalled-Size: {du_kb(deb_root)}\n"
-            "Depends: libc6, libgl1, libegl1, libxkbcommon0, libfontconfig1, libdbus-1-3, libxcb-cursor0\n"
+            "Depends: libc6, libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libfontconfig1, libdbus-1-3, "
+            "libxcb-cursor0, libxcb-icccm4, libxcb-keysyms1, libxcb-image0, libxcb-render-util0, libxcb-xkb1, "
+            "libxcb-randr0, libxcb-shape0, libxcb-xinerama0, libpcre3\n"
             "Recommends: smartmontools, policykit-1 | pkexec\n"
             "Homepage: https://github.com/chago2850-blip/RecuperaDatos-MX\n"
             "Description: Recuperación de datos libre y multiplataforma\n"
@@ -164,7 +166,7 @@ Summary: Recuperación de datos libre y multiplataforma
 License: GPL-3.0-or-later
 URL: https://github.com/chago2850-blip/RecuperaDatos-MX
 Recommends: smartmontools
-Requires: libglvnd-egl, libxkbcommon, fontconfig, dbus-libs
+Requires: libglvnd-egl, libxkbcommon, libxkbcommon-x11, fontconfig, dbus-libs, xcb-util-wm, xcb-util-keysyms, xcb-util-image, xcb-util-renderutil, xcb-util-cursor
 
 %description
 Recupera archivos borrados, discos formateados, particiones perdidas y RAID dañados.

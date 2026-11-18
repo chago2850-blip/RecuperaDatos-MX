@@ -77,6 +77,7 @@ Estas situaciones no dependen del programa sino de cómo funciona el hardware o 
 * **ReFS 1.x/2.x** (Windows Server 2012) se recupera por firmas; ReFS 3.x se lee completo.
 * **BitLocker con TPM únicamente:** la clave está sellada en el chip de esa computadora; se necesita
   la clave de recuperación de 48 dígitos (disponible en la cuenta Microsoft del usuario).
+* **Procesador:** la interfaz (Qt 6) requiere un procesador x86-64-v2 (prácticamente cualquier PC de 2009 en adelante).
 * **Secure Boot:** el ISO de arranque está basado en Debian; si la computadora tiene Arranque
   seguro estricto puede ser necesario desactivarlo temporalmente.
 
