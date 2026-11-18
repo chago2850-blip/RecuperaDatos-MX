@@ -148,7 +148,8 @@ jobs:
           }
           Detach "$O\bitlocker.vhd"
           Get-ChildItem $O | ForEach-Object { W "$($_.Name) $($_.Length)" }
-          Compress-Archive -Path "$O\refs.vhd","$O\bitlocker.vhd","$O\bitlocker_claves.txt","$O\hashes.txt" -DestinationPath "$env:RUNNER_TEMP\datos-windows.zip" -CompressionLevel Optimal
+          7z a -tzip -mx=5 "$env:RUNNER_TEMP\datos-windows.zip" "$O\refs.vhd" "$O\bitlocker.vhd" "$O\bitlocker_claves.txt" "$O\hashes.txt"
+          W ("zip: " + (Get-Item "$env:RUNNER_TEMP\datos-windows.zip").Length)
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: datos-prueba-windows
