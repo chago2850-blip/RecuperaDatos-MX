@@ -68,7 +68,7 @@ jobs:
           hdiutil create -size 64m -fs HFS+ -volname PruebaHFS -layout GPTSPUD $O/hfs.dmg
           hdiutil attach -nobrowse $O/hfs.dmg; fill /Volumes/PruebaHFS; hdiutil detach /Volumes/PruebaHFS
           hdiutil convert $O/hfs.dmg -format UDTO -o $O/hfs
-          hdiutil create -size 200m -fs APFS -volname PruebaAPFS -layout GPTSPUD $O/apfs.dmg
+          hdiutil create -size 1100m -fs APFS -volname PruebaAPFS -layout GPTSPUD $O/apfs.dmg
           hdiutil attach -nobrowse $O/apfs.dmg
           fill /Volumes/PruebaAPFS
           C=$(diskutil info -plist /Volumes/PruebaAPFS | plutil -extract APFSContainerReference raw -)

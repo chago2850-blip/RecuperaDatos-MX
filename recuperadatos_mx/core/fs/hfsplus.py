@@ -87,9 +87,16 @@ class HFSPlus:
             deleted_node = idx not in live_nodes
             if nrec > node_size // 8:
                 continue
-            for r in range(nrec):
-                po = node_size - 2 * (r + 1)
-                off = be16(node, po)
+            offsets = [be16(node, node_size - 2 * (r + 1)) for r in range(nrec)]
+            # registros borrados: quedan en el espacio libre del nodo tras compactarse
+            free_off = be16(node, node_size - 2 * (nrec + 1)) if nrec < node_size // 8 else node_size
+            slack_end = node_size - 2 * (nrec + 1)
+            cand = list(offsets) + [(o, True) for o in range(free_off, slack_end - 8, 2)]
+            for r, item in enumerate(cand):
+                if isinstance(item, tuple):
+                    off, from_slack = item
+                else:
+                    off, from_slack = item, False
                 if off < 14 or off + 8 > node_size:
                     continue
                 klen = be16(node, off)
@@ -104,14 +111,22 @@ class HFSPlus:
                 if d + 2 > node_size:
                     continue
                 rtype = be16(node, d)
-                if rtype == 1 and d + 16 <= node_size:
+                if from_slack:
+                    if rtype != 2 or d + 248 > slack_end or klen != 6 + nlen * 2 or not nlen or nlen > 255:
+                        continue
+                    if not name.isprintable() or "\ufffd" in name:
+                        continue
+                if rtype == 1 and d + 16 <= node_size and not from_slack:
                     fid = be32(node, d + 8)
                     if fid not in folders or not deleted_node:
                         folders[fid] = (name, parent)
                 elif rtype == 2 and d + 168 <= node_size:
                     fork = self._fork(node, d + 88)
+                    if from_slack and (not fork["extents"] or any(sb + c > self.total for sb, c in fork["extents"])
+                                       or fork["size"] > sum(c for _, c in fork["extents"]) * self.bs):
+                        continue
                     files.append((name, parent, fork, hfs_time(be32(node, d + 12)),
-                                  hfs_time(be32(node, d + 16)), be32(node, d + 8), deleted_node))
+                                  hfs_time(be32(node, d + 16)), be32(node, d + 8), deleted_node or from_slack))
             if progress:
                 progress(idx, nnodes)
 
@@ -129,7 +144,11 @@ class HFSPlus:
 
         out: List[FileEntry] = []
         seen = set()
+        live_ids = {fid for _, _, _, _, _, fid, d in files if not d}
+        files.sort(key=lambda f: f[6])  # primero los vivos
         for name, parent, fork, ctime, mtime, fid, deleted in files:
+            if deleted and fid in live_ids:
+                continue
             key = (fid, name)
             if key in seen:
                 continue
