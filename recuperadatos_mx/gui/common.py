@@ -152,7 +152,7 @@ class SourcePicker(QWidget):
         lay.addWidget(self.combo, 1)
         lay.addWidget(tbtn("refresh", "Actualizar la lista de dispositivos", self.refresh))
         if allow_images:
-            lay.addWidget(tbtn("open", "Agregar una imagen de disco (.img, .dd, .raw, .001, .vhd, .iso, .rdmx)",
+            lay.addWidget(tbtn("open", "Agregar una imagen de disco (.img, .dd, .raw, .001, .vhd, .E01, .iso, .rdmx)",
                                self.add_image))
         self.extra = []
         self.refresh()
@@ -176,7 +176,7 @@ class SourcePicker(QWidget):
         if not path:
             path, _ = QFileDialog.getOpenFileName(self, "Abrir imagen de disco", "",
                                                   "Imágenes de disco (*.img *.dd *.raw *.bin *.001 *.vhd *.iso "
-                                                  "*.dmg *.rdmx);;Todos los archivos (*)")
+                                                  "*.dmg *.cdr *.E01 *.e01 *.rdmx);;Todos los archivos (*)")
         if path:
             self.extra.append((path, f"🗂 {os.path.basename(path)}  ({path})"))
             self.refresh()

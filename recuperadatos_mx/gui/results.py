@@ -426,6 +426,10 @@ class ResultsPage(QWidget):
             self.main.partitions_page.set_partitions(self.src, res.partitions)
             if res.log:
                 self.main.status(" | ".join(res.log[-3:]))
+            if res.locked:
+                info(self, "Hay volúmenes cifrados que no se pudieron desbloquear:\n\n" +
+                     "\n".join(f"• {n} ({k})" for n, k, _ in res.locked) +
+                     "\n\nVuelva a escanear e indique la contraseña o la clave de recuperación.")
 
     def clear(self) -> None:
         self.model.reset([])

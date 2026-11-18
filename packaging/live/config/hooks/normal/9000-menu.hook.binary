@@ -1,0 +1,14 @@
+#!/bin/sh
+# Menú de arranque: nombre de la app y arranque automático a los 5 segundos
+for f in isolinux/*.cfg syslinux/*.cfg; do
+    [ -f "$f" ] || continue
+    sed -i 's/Live system/RecuperaDatos-MX Live/g; s/^timeout .*/timeout 50/' "$f"
+done
+if [ -f isolinux/isolinux.cfg ] && ! grep -q '^timeout' isolinux/isolinux.cfg; then
+    echo 'timeout 50' >> isolinux/isolinux.cfg
+fi
+for g in boot/grub/grub.cfg boot/grub/config.cfg; do
+    [ -f "$g" ] || continue
+    sed -i 's/Live system/RecuperaDatos-MX Live/g; s/set timeout=.*/set timeout=5/' "$g"
+done
+grep -q 'set timeout' boot/grub/config.cfg 2>/dev/null || echo 'set timeout=5' >> boot/grub/config.cfg

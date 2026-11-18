@@ -46,7 +46,8 @@ def cmd_escanear(a):
     from .core import session
     from .core.scanner import ScanOptions, scan
     src = _open(a.origen)
-    opts = ScanOptions(deep=a.profundo, carving=not a.sin_firmas, aligned=not a.no_alineado)
+    opts = ScanOptions(deep=a.profundo, carving=not a.sin_firmas, aligned=not a.no_alineado,
+                       passwords=a.clave or [], bek_files=[open(b, "rb").read() for b in (a.bek or [])])
     res = scan(src, opts, progress=_bar)
     sys.stderr.write("\n")
     for line in res.log:
@@ -113,6 +114,22 @@ def cmd_agente(a):
     run_agent(a.host, a.puerto, a.clave)
 
 
+def cmd_iphone(a):
+    from .core.mobile.iphone import Backup, list_backups
+    if not a.respaldo:
+        for b in list_backups():
+            print(f"{b['ruta']}  {b['nombre']} {b['modelo']} iOS {b['ios']}  cifrado={b['cifrado']}")
+        return
+    n = Backup(a.respaldo, a.clave or "").extract(a.destino)
+    print(f"{n} archivos extraídos en {a.destino}")
+
+
+def cmd_sqlite(a):
+    from .core.mobile.sqlite_recover import SQLiteRecovery
+    for f in SQLiteRecovery(a.base).export(a.destino):
+        print(f)
+
+
 def cmd_reparar(a):
     from .core.repair import repair
     out, note = repair(a.archivo, a.referencia)
@@ -150,6 +167,9 @@ def main(argv=None):
     s.add_argument("--no-alineado", action="store_true", help="Buscar firmas en cualquier byte (más lento)")
     s.add_argument("--sesion", help="Guardar la sesión de escaneo (.rdsesion)")
     s.add_argument("--listar", action="store_true", help="Imprimir todos los archivos")
+    s.add_argument("--clave", action="append", help="Contraseña o clave de recuperación (BitLocker, LUKS, FileVault); "
+                   "puede repetirse")
+    s.add_argument("--bek", action="append", help="Archivo .BEK de BitLocker")
     s.set_defaults(fn=cmd_escanear)
     s = sub.add_parser("recuperar", help="Recuperar archivos de una sesión")
     s.add_argument("sesion")
@@ -182,8 +202,17 @@ def main(argv=None):
     s.set_defaults(fn=cmd_agente)
     s = sub.add_parser("reparar", help="Reparar JPEG, PDF, ZIP/Office")
     s.add_argument("archivo")
-    s.add_argument("--referencia")
+    s.add_argument("--referencia", help="Foto o video sano de la misma cámara")
     s.set_defaults(fn=cmd_reparar)
+    s = sub.add_parser("iphone", help="Listar o extraer respaldos de iPhone/iPad (también cifrados)")
+    s.add_argument("respaldo", nargs="?")
+    s.add_argument("destino", nargs="?", default="iphone_extraido")
+    s.add_argument("--clave")
+    s.set_defaults(fn=cmd_iphone)
+    s = sub.add_parser("sqlite", help="Recuperar registros borrados de una base SQLite (mensajes, chats)")
+    s.add_argument("base")
+    s.add_argument("destino")
+    s.set_defaults(fn=cmd_sqlite)
     s = sub.add_parser("boveda", help="Bóveda de recuperación (protección)")
     s.add_argument("--agregar")
     s.add_argument("--vigilar", action="store_true")

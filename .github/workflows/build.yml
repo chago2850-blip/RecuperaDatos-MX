@@ -23,12 +23,14 @@ jobs:
       - name: Dependencias
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq dosfstools mtools exfatprogs exfat-fuse ntfs-3g
+          sudo apt-get install -y -qq dosfstools mtools exfatprogs exfat-fuse ntfs-3g ffmpeg ewf-tools
           pip install -r requirements.txt pytest
       - name: Imágenes de prueba
         run: sudo -E env "PATH=$PATH" python tests/build_images.py /tmp/rdt && sudo chmod -R a+r /tmp/rdt
+      - name: Imágenes reales de macOS, Windows y Linux
+        run: python tests/get_test_data.py /tmp/dp
       - name: Pruebas
-        run: RD_IMAGES=/tmp/rdt QT_QPA_PLATFORM=offscreen python -m pytest -q tests
+        run: RD_IMAGES=/tmp/rdt RD_DATOS=/tmp/dp QT_QPA_PLATFORM=offscreen python -m pytest -q tests
 
   compilar:
     needs: pruebas
@@ -95,4 +97,29 @@ jobs:
             | Fedora / openSUSE / RHEL | `recuperadatos-mx-*.x86_64.rpm` |
             | Cualquier Linux | `RecuperaDatos-MX-*-linux-x86_64.tar.gz` |
 
+            | Memoria USB de arranque | `RecuperaDatos-MX-*-live-amd64.iso` (se agrega unos minutos después; grábela desde la app en «Medio de arranque» o con balenaEtcher/Rufus) |
+
             Ejecute la aplicación como administrador para leer discos físicos. Licencia GPL-3.0 o posterior.
+
+  live:
+    needs: publicar
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:bookworm
+      options: --privileged
+    steps:
+      - run: apt-get update -qq && apt-get install -y -qq live-build ca-certificates git python3 xorriso
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: instaladores-ubuntu-22.04
+          path: deb
+      - name: Versión
+        id: ver
+        run: echo "v=$(python3 -c 'import recuperadatos_mx as r; print(r.__version__)')" >> "$GITHUB_OUTPUT"
+      - name: Construir ISO live
+        run: sh packaging/live/build-live.sh deb/recuperadatos-mx_${{ steps.ver.outputs.v }}_amd64.deb ${{ steps.ver.outputs.v }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.v }}
+          files: /tmp/RecuperaDatos-MX-${{ steps.ver.outputs.v }}-live-amd64.iso

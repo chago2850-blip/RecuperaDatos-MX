@@ -266,3 +266,24 @@ def scan(src: BlockSource, opts: ScanOptions, progress: Optional[Progress] = Non
     res.bad_bytes = getattr(getattr(src, "errors", None), "bad_bytes", 0)
     res.finished = time.time()
     return res
+
+
+def find_encrypted(src: BlockSource) -> List[tuple]:
+    """Volúmenes cifrados del origen: [(descripción, tipo)] — BitLocker, LUKS y APFS/FileVault."""
+    out = []
+    parts = read_table(src)
+    if not parts:
+        fs0 = detect(src, 0)
+        parts = [Partition(0, 0, src.size, fs0 or "", fs=fs0, scheme="volumen")] if fs0 else []
+    for p in parts:
+        if p.fs in ("BitLocker", "LUKS"):
+            out.append((_volume_label(p), p.fs))
+        elif p.fs == "APFS":
+            try:
+                from .fs.apfs import APFSContainer
+                for v in APFSContainer(src, p.start).volumes():
+                    if v.encrypted:
+                        out.append((f"Volumen APFS «{v.name}»", "FileVault"))
+            except Exception:
+                pass
+    return out

@@ -9,7 +9,7 @@ versión posterior.
 """
 
 __app_name__ = "RecuperaDatos-MX"
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "Santiago Miguel"
 __email__ = "chago2850@gmail.com"
 __license__ = "GPL-3.0-or-later"

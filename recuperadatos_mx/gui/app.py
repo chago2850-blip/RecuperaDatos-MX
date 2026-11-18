@@ -27,6 +27,8 @@ NAV = [
     ("reparar", "Reparar archivos", "repair", "Reparar fotos JPEG, PDF y documentos de Office/ZIP dañados"),
     ("boveda", "Bóveda", "vault", "Protección preventiva de carpetas importantes"),
     ("red", "Recuperación por red", "network", "Recuperar datos de otra computadora de la red"),
+    ("moviles", "Teléfonos", "phone", "iPhone/iPad (respaldos, incluso cifrados), Android por USB y mensajes borrados"),
+    ("arranque", "Medio de arranque", "usb", "Crear una memoria USB de arranque para equipos que no inician"),
     ("firmas", "Tipos de archivo", "signature", "Firmas del escaneo profundo y firmas personalizadas"),
     ("acerca", "Acerca de", "about", "Versión, licencia GPL y autor"),
 ]
@@ -48,10 +50,10 @@ class MainWindow(QMainWindow):
         h.setSpacing(0)
         side = QWidget()
         side.setObjectName("Sidebar")
-        side.setFixedWidth(232)
+        side.setFixedWidth(236)
         sl = QVBoxLayout(side)
         sl.setContentsMargins(14, 16, 14, 14)
-        sl.setSpacing(4)
+        sl.setSpacing(2)
         brand = QHBoxLayout()
         lg = QLabel()
         lg.setPixmap(QPixmap(os.path.join(ASSETS, "logo.png")).scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -73,6 +75,7 @@ class MainWindow(QMainWindow):
         from .pages import (AboutPage, HexPage, HomePage, ImagingPage, NetworkPage, PartitionsPage, RaidPage,
                             RepairPage, SignaturesPage, SmartPage, VaultPage)
         from .results import ResultsPage
+        from .pages2 import BootMediaPage, MobilePage
         self.signatures_page = SignaturesPage(self)
         self.results = ResultsPage(self)
         self.partitions_page = PartitionsPage(self)
@@ -81,7 +84,8 @@ class MainWindow(QMainWindow):
         self.pages = {"inicio": self.home, "resultados": self.results, "particiones": self.partitions_page,
                       "raid": RaidPage(self), "imagen": ImagingPage(self), "editor": self.hex_page,
                       "salud": SmartPage(self), "reparar": RepairPage(self), "boveda": VaultPage(self),
-                      "red": NetworkPage(self), "firmas": self.signatures_page, "acerca": AboutPage(self)}
+                      "red": NetworkPage(self), "moviles": MobilePage(self), "arranque": BootMediaPage(self),
+                      "firmas": self.signatures_page, "acerca": AboutPage(self)}
         for key, text, ic, tip in NAV:
             b = QToolButton()
             b.setObjectName("Nav")

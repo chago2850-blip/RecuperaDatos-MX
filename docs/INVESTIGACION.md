@@ -28,46 +28,57 @@ Las cuatro aplicaciones combinan las mismas técnicas, con distinta profundidad:
 
 | Función | EaseUS | R-Studio | DMDE | Disk Drill Ent. | RecuperaDatos-MX |
 |---|:-:|:-:|:-:|:-:|---|
-| Escaneo rápido de archivos borrados | ✔ | ✔ | ✔ | ✔ | ✔ NTFS, FAT12/16/32, exFAT, ext2/3/4, HFS+ |
+| Escaneo rápido de archivos borrados | ✔ | ✔ | ✔ | ✔ | ✔ NTFS, FAT12/16/32, exFAT, ext2/3/4, HFS+, **APFS, ReFS, Btrfs, XFS** |
 | Escaneo profundo por firmas | ✔ | ✔ | ✔ | ✔ | ✔ 70 familias (más de 110 extensiones) con validación estructural |
 | Firmas personalizadas | — | ✔ | ✔ | — | ✔ cabecera/pie en hex, desplazamiento, tamaño máx. |
-| Reconstrucción NTFS con MFT dañada / formateo | parcial | ✔ | ✔ | parcial | ✔ búsqueda de registros `FILE` huérfanos con nombres y rutas |
-| Recuperación ext4 tras borrado | — | ✔ | ✔ | parcial | ✔ copias de inodos y directorios en el journal JBD2 |
+| Reconstrucción NTFS con MFT dañada / formateo | parcial | ✔ | ✔ | parcial | ✔ registros `FILE` huérfanos con nombres y rutas |
+| Recuperación ext4 / XFS tras borrado | — | ✔ | ✔ | parcial | ✔ copias de inodos y directorios en el journal (JBD2 y log de XFS) |
+| APFS y Btrfs: borrados por copy-on-write | ✔ | ✔ | ✔ | ✔ | ✔ nodos antiguos del árbol, con nombre y carpeta |
+| ReFS 3.x | ✔ | ✔ | ✔ | — | ✔ tabla de contenedores, registros incrustados y filas de directorio no indexadas |
+| Volúmenes cifrados | BitLocker | BitLocker, FileVault | BitLocker | BitLocker | ✔ **BitLocker** (contraseña, clave de recuperación de 48 dígitos, .BEK; XTS, CBC y difusor de Windows 7), **FileVault/APFS cifrado**, **LUKS1/LUKS2** (PBKDF2 y Argon2) |
 | NTFS comprimido, flujos alternos (ADS) | ✔ | ✔ | ✔ | ✔ | ✔ LZNT1 y ADS |
-| Estimación de probabilidad de recuperación | — | ✔ | — | ✔ | ✔ por bitmap de clústeres / asignación |
+| Estimación de probabilidad de recuperación | — | ✔ | — | ✔ | ✔ bitmap de clústeres + verificación del contenido (detecta TRIM y clústeres reutilizados) |
 | Vista previa antes de recuperar | ✔ | ✔ | imágenes | ✔ | ✔ imágenes, PDF, texto, hex y apertura externa |
 | Filtros por tipo, nombre, estado, tamaño | ✔ | ✔ | ✔ | ✔ | ✔ y árbol de carpetas reconstruido |
 | Guardar y reanudar sesiones de escaneo | — | ✔ | ✔ | ✔ | ✔ `.rdsesion` |
 | Búsqueda y restauración de particiones perdidas | ✔ | ✔ | ✔ | ✔ | ✔ NTFS (incl. respaldo), FAT, exFAT, ext, HFS+, APFS, XFS; escritura MBR/GPT |
 | Reparación del sector de arranque NTFS | — | — | ✔ | — | ✔ desde la copia de respaldo |
-| RAID virtual | — | ✔ 0,1,4,5,6,10,1E,5E… | ✔ 0,1,4,5,6, JBOD | ✔ | ✔ JBOD, 0, 1, 1E, 4, 5, 6 (XOR), 10; miembros faltantes; retardo de paridad |
+| RAID virtual | — | ✔ 0,1,4,5,6,10,1E… | ✔ 0,1,4,5,6, JBOD | ✔ | ✔ JBOD, 0, 1, 1E, 4, 5, **6 con dos discos faltantes (Reed-Solomon P+Q)**, 10; retardo de paridad |
 | Detección automática de parámetros RAID | — | ✔ | ✔ | — | ✔ orden, franja, nivel y esquema |
 | Imagen byte a byte con sectores dañados | — | ✔ | ✔ | ✔ | ✔ reintento por sector, salto tras error, copia inversa, reanudación, MD5/SHA-256, partes |
 | Clonar disco / restaurar imagen | ✔ (otro producto) | ✔ | ✔ | — | ✔ |
-| Abrir imágenes RAW, divididas, VHD | ✔ | ✔ | ✔ | ✔ | ✔ `.img/.dd/.raw/.001…/.vhd` |
+| Imágenes RAW, divididas, VHD, **E01** | ✔ | ✔ | ✔ | ✔ | ✔ `.img/.dd/.raw/.001…/.vhd/.cdr/.E01` (EnCase 1–7, varios segmentos, comprimidos) |
 | Editor hexadecimal de disco con plantillas | — | ✔ | ✔ | hex | ✔ MBR, GPT, NTFS, FAT, ext, registro MFT; búsqueda y edición |
 | S.M.A.R.T. | — | ✔ | — | ✔ | ✔ ATA y NVMe vía smartctl, alertas y vigilancia |
 | Recuperación por red | — | ✔ | — | — | ✔ agente de solo lectura con autenticación HMAC |
-| Reparación de fotos y documentos | ✔ | — | — | — | ✔ JPEG (con referencia), ZIP/DOCX/XLSX/PPTX/ODT, PDF |
+| Reparación de fotos, documentos y **video** | ✔ | — | — | — | ✔ JPEG, ZIP/Office/ODF, PDF y **MP4/MOV H.264/H.265** (índice reconstruido con video de referencia) |
+| **Medio de arranque** | ✔ | ✔ | ✔ (DOS) | ✔ (macOS) | ✔ ISO «RecuperaDatos-MX Live» (Debian, BIOS/UEFI) y grabador USB con verificación |
+| **iPhone / Android** | ✔ (otro producto) | — | — | ✔ | ✔ respaldos de iPhone (también cifrados), papelera y carpetas de Android por ADB, imagen de particiones con root, **mensajes borrados en SQLite** |
 | Protección preventiva (Recovery Vault) | — | — | — | ✔ | ✔ Bóveda con ubicación física (FIEMAP / FSCTL / F_LOG2PHYS) |
 | Windows, macOS y Linux | Win/Mac | ✔ | ✔ | Win/Mac | ✔ |
 | Línea de comandos | — | ✔ (técnico) | ✔ | — | ✔ `recuperadatos-mx` |
 | Límite de recuperación | 2 GB gratis | 256 KB gratis | 4000 archivos/dir | 500 MB gratis | **sin límites, GPL-3** |
 
-## 3. Lo que todavía no cubre RecuperaDatos-MX 1.0
+## 3. Límites que siguen existiendo (también en los programas comerciales)
 
-Para ser transparentes, estas capacidades de los productos comerciales no están
-implementadas a nivel de archivos en esta versión (los volúmenes se detectan y sus
-archivos se recuperan por firmas):
+Estas situaciones no dependen del programa sino de cómo funciona el hardware o el sistema:
 
-* Lectura del árbol de archivos de **APFS, ReFS, Btrfs, XFS y UFS** (se detectan y se
-  buscan como particiones; su contenido se recupera con el escaneo profundo).
-* Volúmenes cifrados (BitLocker, FileVault, LUKS) y archivos cifrados con EFS
-  (se recupera el contenido cifrado).
-* Imágenes **E01/EWF**, VMDK y VHDX (sí: RAW, divididas y VHD).
-* Creación de medios de arranque, recuperación de iPhone/Android y de copias de Time Machine.
-* Paridad Reed-Solomon de RAID 6 (dos discos faltantes) y RAID 5E/5EE/6E.
-* Hardware especializado (DeepSpar, PC-3000) y reparación de video MP4/MOV.
+* **TRIM en SSD, memorias y discos virtuales:** al borrar, el sistema le indica a la unidad que
+  descarte los bloques y quedan en ceros. RecuperaDatos-MX encuentra el nombre (por ejemplo en
+  ReFS o NTFS) pero marca el archivo con probabilidad «Baja» porque su contenido ya no existe.
+* **Cifrado por hardware de teléfonos:** en iPhone y en Android moderno no es posible leer el
+  espacio libre de la memoria interna sin el teléfono desbloqueado y con acceso total; se recupera
+  lo que hay en respaldos, en la papelera del sistema, en miniaturas y en registros borrados de las
+  bases de datos.
+* **Audio de videos sin índice:** en un MP4/MOV cortado se reconstruye la pista de video; el audio
+  necesitaría el índice original, que es justamente lo que se perdió.
+* **macOS moderno y HFS+:** al borrar, macOS limpia el registro del catálogo; los datos se
+  recuperan por firma, sin el nombre original.
+* **ReFS 1.x/2.x** (Windows Server 2012) se recupera por firmas; ReFS 3.x se lee completo.
+* **BitLocker con TPM únicamente:** la clave está sellada en el chip de esa computadora; se necesita
+  la clave de recuperación de 48 dígitos (disponible en la cuenta Microsoft del usuario).
+* **Secure Boot:** el ISO de arranque está basado en Debian; si la computadora tiene Arranque
+  seguro estricto puede ser necesario desactivarlo temporalmente.
 
 ## 4. Fuentes
 

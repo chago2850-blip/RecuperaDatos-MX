@@ -25,6 +25,22 @@ from .hexview import HexView
 ASSETS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
 
 
+def ask_passwords(parent, src, opts) -> None:
+    """Si el origen tiene volúmenes cifrados, pide contraseñas/claves antes de escanear."""
+    from ..core.scanner import find_encrypted
+    try:
+        locked = find_encrypted(src)
+    except Exception:
+        locked = []
+    if not locked:
+        return
+    from .pages2 import PasswordDialog
+    d = PasswordDialog(parent, locked)
+    if d.exec():
+        opts.passwords = d.passwords()
+        opts.bek_files = d.bek
+
+
 def page_layout(w: QWidget) -> QVBoxLayout:
     lay = QVBoxLayout(w)
     lay.setContentsMargins(26, 22, 26, 22)
@@ -151,7 +167,7 @@ class HomePage(QWidget):
     def add_image(self, path: Optional[str] = None) -> None:
         if not path:
             path, _ = QFileDialog.getOpenFileName(self, "Abrir imagen de disco", "",
-                                                  "Imágenes (*.img *.dd *.raw *.bin *.001 *.vhd *.iso *.dmg *.rdmx);;"
+                                                  "Imágenes (*.img *.dd *.raw *.bin *.001 *.vhd *.iso *.dmg *.cdr *.E01 *.e01 *.rdmx);;"
                                                   "Todos (*)")
         if path:
             self.images.append(path)
@@ -180,6 +196,7 @@ class HomePage(QWidget):
         src = self._open()
         if src:
             opts = opts or ScanOptions(deep=deep, signatures=self.main.signatures())
+            ask_passwords(self, src, opts)
             self.main.go("resultados")
             self.main.results.start_scan(src, opts, f"{'Escaneo profundo' if opts.deep else 'Escaneo rápido'} · "
                                                     f"{src.name}")
@@ -358,8 +375,9 @@ class PartitionsPage(QWidget):
         p = sel[0]
         sub = SliceSource(self.src, p.start, p.size, name=f"{self.src.name} · partición {p.index} ({p.fs})")
         self.main.go("resultados")
-        self.main.results.start_scan(sub, ScanOptions(deep=deep, signatures=self.main.signatures()),
-                                     f"Partición {p.index} ({p.fs}) · {self.src.name}")
+        opts = ScanOptions(deep=deep, signatures=self.main.signatures())
+        ask_passwords(self, sub, opts)
+        self.main.results.start_scan(sub, opts, f"Partición {p.index} ({p.fs}) · {self.src.name}")
 
     def open_hex(self) -> None:
         sel = self.selected()
@@ -1003,7 +1021,9 @@ class RepairPage(QWidget):
         lay = page_layout(self)
         lay.addWidget(heading("Reparar archivos", "Repare fotos JPEG truncadas o con cabecera dañada (con foto de "
                                                   "referencia de la misma cámara), documentos ZIP/DOCX/XLSX/PPTX/ODT "
-                                                  "con el directorio central roto y PDF con la tabla xref dañada. "
+                                                  "con el directorio central roto, PDF con la tabla xref dañada y "
+                                                  "videos MP4/MOV cortados (grabación interrumpida o recuperada sin "
+                                                  "índice), usando un video de referencia de la misma cámara. "
                                                   "El original nunca se modifica."))
         self.files = QListWidget()
         self.files.setToolTip("Archivos a reparar")
@@ -1016,8 +1036,9 @@ class RepairPage(QWidget):
         lay.addWidget(self.files, 1)
         rrow = QHBoxLayout()
         self.ref = QLineEdit()
-        self.ref.setPlaceholderText("Foto de referencia (opcional, misma cámara y resolución)")
-        self.ref.setToolTip("Se usa su cabecera para reconstruir JPEG cuya cabecera se perdió")
+        self.ref.setPlaceholderText("Foto o video de referencia (misma cámara y ajustes; obligatorio para video)")
+        self.ref.setToolTip("Foto: se usa su cabecera para JPEG sin cabecera. Video: se copian sus parámetros de "
+                            "códec para reconstruir el índice del video dañado")
         rrow.addWidget(self.ref, 1)
         rrow.addWidget(btn("Elegir…", "Seleccionar la foto de referencia", "open", self.pick_ref))
         lay.addLayout(rrow)
@@ -1033,12 +1054,12 @@ class RepairPage(QWidget):
     def add(self) -> None:
         ps, _ = QFileDialog.getOpenFileNames(self, "Archivos dañados", "",
                                              "Compatibles (*.jpg *.jpeg *.pdf *.zip *.docx *.xlsx *.pptx *.odt *.ods "
-                                             "*.odp *.epub);;Todos (*)")
+                                             "*.odp *.epub *.mp4 *.mov *.m4v *.3gp);;Todos (*)")
         for p in ps:
             self.files.addItem(p)
 
     def pick_ref(self) -> None:
-        p, _ = QFileDialog.getOpenFileName(self, "Foto de referencia", "", "JPEG (*.jpg *.jpeg)")
+        p, _ = QFileDialog.getOpenFileName(self, "Referencia", "", "Foto o video (*.jpg *.jpeg *.mp4 *.mov *.m4v *.3gp)")
         if p:
             self.ref.setText(p)
 
@@ -1047,7 +1068,8 @@ class RepairPage(QWidget):
             p = self.files.item(i).text()
             try:
                 ref = self.ref.text().strip() or None
-                out, note = repair.repair(p, ref if p.lower().endswith((".jpg", ".jpeg")) else None)
+                is_media = p.lower().endswith((".jpg", ".jpeg", ".mp4", ".mov", ".m4v", ".3gp"))
+                out, note = repair.repair(p, ref if is_media else None)
                 self.out.appendPlainText(f"✔ {os.path.basename(p)} → {out}\n   {note}")
             except Exception as exc:
                 self.out.appendPlainText(f"✖ {os.path.basename(p)}: {exc}")
@@ -1391,8 +1413,10 @@ class AboutPage(QWidget):
         lay.addWidget(t)
         txt = QLabel(
             "<p>Recuperación de datos profesional, libre y sin límites: escaneo rápido y profundo, NTFS, FAT, exFAT, "
-            "ext2/3/4, HFS+, particiones perdidas, RAID virtual, imágenes byte a byte, editor de disco, S.M.A.R.T., "
-            "reparación de archivos, bóveda de protección y recuperación por red.</p>"
+            "ext2/3/4, HFS+, APFS, ReFS, Btrfs y XFS; BitLocker, FileVault y LUKS; particiones perdidas, RAID virtual "
+            "(incluido RAID 6 con dos discos fallados), imágenes byte a byte y E01, editor de disco, S.M.A.R.T., "
+            "reparación de fotos, documentos y videos, teléfonos, medio de arranque, bóveda de protección y "
+            "recuperación por red.</p>"
             f"<p>Desarrollador: <b>{__author__}</b> · {__email__} · 744 354 8848</p>"
             "<p>Este programa es software libre: puede redistribuirlo y/o modificarlo bajo los términos de la "
             "<b>Licencia Pública General GNU versión 3</b> o (a su elección) cualquier versión posterior. Se distribuye "
