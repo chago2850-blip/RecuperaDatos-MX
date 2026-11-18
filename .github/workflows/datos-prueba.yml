@@ -73,7 +73,8 @@ jobs:
           fill /Volumes/PruebaAPFS
           C=$(diskutil info -plist /Volumes/PruebaAPFS | plutil -extract APFSContainerReference raw -)
           echo "::warning::contenedor=$C"
-          OUT=$(diskutil apfs addVolume "$C" APFS Secreto -passphrase clave123 2>&1); echo "$OUT"
+          set +e
+          OUT=$(diskutil apfs addVolume "$C" APFS Secreto -passphrase clave123 2>&1 || true); echo "$OUT"
           echo "::warning::addVolume: $(echo $OUT | tr '\n' ' ' | cut -c1-600)"
           sleep 3; ls /Volumes
           [ -d /Volumes/Secreto ] && fill /Volumes/Secreto
@@ -94,6 +95,7 @@ jobs:
           files: ${{ runner.temp }}/datos-macos.zip
 
   windows:
+    if: ${{ !contains(github.event.head_commit.message, '[sin-windows]') }}
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4

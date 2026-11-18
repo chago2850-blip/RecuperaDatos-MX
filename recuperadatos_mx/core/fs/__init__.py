@@ -78,4 +78,16 @@ def open_fs(src: BlockSource, base: int = 0, kind: Optional[str] = None):
     if kind == "HFS+":
         from .hfsplus import HFSPlus
         return HFSPlus(src, base)
+    if kind == "XFS":
+        from .xfs import XFS
+        return XFS(src, base)
+    if kind == "Btrfs":
+        from .btrfs import Btrfs
+        return Btrfs(src, base)
+    if kind == "APFS":
+        from .apfs import APFS
+        return APFS(src, base)
+    if kind == "ReFS":
+        from .refs import ReFS
+        return ReFS(src, base)
     return None
