@@ -1,0 +1,8 @@
+#!/bin/sh
+# Instala RecuperaDatos-MX desde el paquete copiado en /root durante la construcción
+set -e
+for d in /root/recuperadatos-mx*.deb; do
+    [ -f "$d" ] || continue
+    apt-get install -y "$d" || { dpkg -i "$d" || true; apt-get -f install -y; }
+    rm -f "$d"
+done
