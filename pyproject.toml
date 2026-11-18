@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recuperadatos-mx"
+dynamic = ["version"]
+description = "Recuperación de datos libre y multiplataforma: archivos borrados, particiones perdidas, RAID, imágenes de disco"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+authors = [{ name = "Santiago Miguel", email = "chago2850@gmail.com" }]
+requires-python = ">=3.9"
+dependencies = ["PySide6>=6.6"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Topic :: System :: Recovery Tools",
+  "Natural Language :: Spanish",
+]
+
+[project.urls]
+Homepage = "https://github.com/chago2850-blip/RecuperaDatos-MX"
+
+[project.scripts]
+recuperadatos-mx = "recuperadatos_mx.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "recuperadatos_mx.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["recuperadatos_mx*"]
+
+[tool.setuptools.package-data]
+recuperadatos_mx = ["assets/*"]
