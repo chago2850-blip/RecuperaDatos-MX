@@ -72,6 +72,9 @@ def read_table(src: BlockSource) -> List[Partition]:
     sec = src.read(0, ss)
     if len(sec) < 512 or sec[510:512] != b"\x55\xAA":
         return out
+    if sec[3:11] in (b"NTFS    ", b"EXFAT   ", b"-FVE-FS-") or sec[3:7] == b"ReFS" or \
+            sec[82:87] == b"FAT32" or sec[54:59] in (b"FAT12", b"FAT16"):
+        return out  # es un sector de arranque de volumen, no una tabla de particiones
     entries = list(_mbr_entries(sec))
     if any(t == 0xEE for _, t, _, _ in entries):
         gpt = read_gpt(src)

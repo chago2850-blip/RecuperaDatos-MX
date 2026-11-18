@@ -82,3 +82,30 @@ class DecryptedSource(BlockSource):
 
     def describe(self) -> dict:
         return {"tipo": "cifrado", "nombre": self.name, "padre": self.parent.describe(), "tamano": self.size}
+
+
+def iter_apfs_encrypted(src: BlockSource, entry, remaining: int):
+    """Contenido de un archivo de un volumen APFS cifrado (AES-XTS, unidades de 512 bytes)."""
+    vek = bytes.fromhex(entry.codec_args["vek"])
+    tweaks = entry.codec_args.get("tweaks", [])
+    for (off, ln), tw in zip(entry.extents, tweaks):
+        if remaining <= 0:
+            break
+        n = min(ln, remaining)
+        if off < 0:
+            yield b"\0" * n
+            remaining -= n
+            continue
+        pos = 0
+        while pos < n:
+            k = min(1 << 20, n - pos)
+            k_al = (k + 511) // 512 * 512
+            raw = src.read(off + pos, k_al).ljust(k_al, b"\0")
+            out = bytearray()
+            for i in range(0, k_al, 512):
+                t = struct.pack("<Q", tw + (pos + i) // 512) + b"\0" * 8
+                d = Cipher(algorithms.AES(vek), modes.XTS(t)).decryptor()
+                out += d.update(raw[i:i + 512]) + d.finalize()
+            yield bytes(out[:k])
+            pos += k
+        remaining -= n

@@ -1,0 +1,4 @@
+#!/bin/sh
+sed -i 's/^# *es_MX.UTF-8/es_MX.UTF-8/' /etc/locale.gen
+locale-gen
+echo 'LANG=es_MX.UTF-8' > /etc/default/locale

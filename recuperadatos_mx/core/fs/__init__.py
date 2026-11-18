@@ -26,6 +26,10 @@ def detect(src: BlockSource, base: int = 0) -> Optional[str]:
         return None
     if head[3:11] == b"NTFS    ":
         return "NTFS"
+    if head[3:11] == b"-FVE-FS-":
+        return "BitLocker"
+    if head[:6] == b"LUKS\xba\xbe":
+        return "LUKS"
     if head[3:11] == b"EXFAT   ":
         return "exFAT"
     if head[3:7] == b"ReFS":

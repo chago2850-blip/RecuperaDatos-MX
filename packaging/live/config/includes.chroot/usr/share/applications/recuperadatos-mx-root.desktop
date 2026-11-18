@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=RecuperaDatos-MX (administrador)
+Exec=sudo -E /usr/bin/recuperadatos-mx gui
+Icon=recuperadatos-mx
+Categories=System;Utility;

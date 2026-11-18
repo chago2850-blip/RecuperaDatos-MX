@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=RecuperaDatos-MX
+Comment=Iniciar RecuperaDatos-MX con acceso a los discos
+Exec=sh -c "sleep 3; sudo -E /usr/bin/recuperadatos-mx gui"
+Icon=recuperadatos-mx
+X-GNOME-Autostart-enabled=true

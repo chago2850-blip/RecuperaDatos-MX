@@ -92,9 +92,14 @@ CHUNK = 1 << 20
 
 def iter_content(src: BlockSource, entry: FileEntry, limit: Optional[int] = None) -> Iterator[bytes]:
     """Genera el contenido del archivo en bloques."""
+    src = getattr(entry, "_src", None) or src
     remaining = entry.size if limit is None else min(entry.size, limit)
     if entry.resident is not None:
         yield entry.resident[:remaining]
+        return
+    if entry.codec == "apfs-xts":
+        from .crypto.common import iter_apfs_encrypted
+        yield from iter_apfs_encrypted(src, entry, remaining)
         return
     if entry.codec == "lznt1":
         from .fs.ntfs import iter_compressed
@@ -138,6 +143,7 @@ class EntrySource(BlockSource):
     identificación de tipo, imágenes dentro de imágenes)."""
 
     def __init__(self, src: BlockSource, entry: FileEntry) -> None:
+        src = getattr(entry, "_src", None) or src
         self.src, self.entry = src, entry
         self.size = entry.size
         self.name = entry.name
