@@ -153,3 +153,37 @@ def test_repair_jpeg_truncated(tmp_path):
     p.write_bytes(data[:-200])
     out, _ = repair.repair_jpeg(str(p))
     Image.open(out).load()
+
+
+def _make_raid6(data: bytes, n: int, stripe: int):
+    from recuperadatos_mx.core.raid import VirtualRAID, q_syndrome, xor_bytes
+    tmp = VirtualRAID([MemorySource(b"\0" * stripe * 4)] * n, "6", stripe, "left-symmetric")
+    disks = [bytearray() for _ in range(n)]
+    sn = row = 0
+    while sn * stripe < len(data):
+        p, q, order = tmp._row6(row)
+        chunks = []
+        for k in range(n - 2):
+            chunks.append(data[sn * stripe:(sn + 1) * stripe].ljust(stripe, b"\0"))
+            sn += 1
+        row_disks = [None] * n
+        for k, d in enumerate(order):
+            row_disks[d] = chunks[k]
+        row_disks[p] = xor_bytes(chunks)
+        row_disks[q] = q_syndrome(chunks)
+        for d in range(n):
+            disks[d] += row_disks[d]
+        row += 1
+    return [MemorySource(bytes(d)) for d in disks]
+
+
+@pytest.mark.parametrize("missing", [(0,), (1, 3), (0, 4), (2, 5), (3, 4)])
+def test_raid6_double_failure(missing):
+    import random
+    rnd = random.Random(3)
+    stripe, n = 4096, 6
+    data = bytes(rnd.randrange(256) for _ in range(stripe * 4 * 7))
+    members = _make_raid6(data, n, stripe)
+    mem = [None if i in missing else m for i, m in enumerate(members)]
+    v = VirtualRAID(mem, "6", stripe, "left-symmetric")
+    assert v.read(0, len(data)) == data

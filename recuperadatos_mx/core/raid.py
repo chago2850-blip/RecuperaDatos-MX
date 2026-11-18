@@ -1,5 +1,5 @@
-"""Constructor de RAID virtual: JBOD, RAID 0, 1, 1E, 4, 5, 5E-like, 6 (paridad XOR),
-10, con miembros faltantes, desplazamientos por disco y detección automática."""
+"""Constructor de RAID virtual: JBOD, RAID 0, 1, 1E, 4, 5, 6 (paridad P+Q Reed-Solomon,
+hasta dos discos faltantes), 10, con miembros faltantes, desplazamientos por disco y detección automática."""
 from __future__ import annotations
 
 import itertools
@@ -12,6 +12,53 @@ LEVELS = ["JBOD", "0", "1", "1E", "4", "5", "6", "10"]
 LAYOUTS = ["left-asymmetric", "left-symmetric", "right-asymmetric", "right-symmetric"]
 LAYOUT_NAMES = {"left-asymmetric": "Izquierda asimétrica", "left-symmetric": "Izquierda simétrica (Linux md)",
                 "right-asymmetric": "Derecha asimétrica", "right-symmetric": "Derecha simétrica"}
+
+
+# ---- Campo de Galois GF(2^8) (polinomio 0x11D, generador 2) para la paridad Q de RAID 6 ----
+_EXP = [0] * 512
+_LOG = [0] * 256
+_x = 1
+for _i in range(255):
+    _EXP[_i] = _x
+    _LOG[_x] = _i
+    _x <<= 1
+    if _x & 0x100:
+        _x ^= 0x11D
+for _i in range(255, 512):
+    _EXP[_i] = _EXP[_i - 255]
+
+
+def gf_mul(a: int, b: int) -> int:
+    if a == 0 or b == 0:
+        return 0
+    return _EXP[_LOG[a] + _LOG[b]]
+
+
+def gf_inv(a: int) -> int:
+    return _EXP[255 - _LOG[a]]
+
+
+def gf_pow2(k: int) -> int:
+    return _EXP[k % 255]
+
+
+_MUL_TABLES = {}
+
+
+def gf_scale(data: bytes, c: int) -> bytes:
+    """Multiplica cada byte por la constante ``c`` (vectorizado con bytes.translate)."""
+    if c == 1:
+        return data
+    t = _MUL_TABLES.get(c)
+    if t is None:
+        t = bytes(gf_mul(c, v) for v in range(256))
+        _MUL_TABLES[c] = t
+    return data.translate(t)
+
+
+def q_syndrome(blocks: List[bytes]) -> bytes:
+    """Q = Σ g^k · D_k"""
+    return xor_bytes([gf_scale(b, gf_pow2(k)) for k, b in enumerate(blocks)])
 
 
 def xor_bytes(blocks: List[bytes]) -> bytes:
@@ -59,8 +106,8 @@ class VirtualRAID(BlockSource):
                 raise ValueError("RAID 4/5 tolera un solo miembro faltante")
             self.size = self.msize * (n - 1)
         elif level == "6":
-            if missing > 1:
-                raise ValueError("Con paridad XOR solo se reconstruye un miembro faltante en RAID 6")
+            if missing > 2:
+                raise ValueError("RAID 6 tolera como máximo dos miembros faltantes")
             self.size = self.msize * (n - 2)
         elif level == "10":
             if n % 2:
@@ -108,7 +155,50 @@ class VirtualRAID(BlockSource):
             return d, row, [x for x in range(n) if x != q]
         raise ValueError
 
+    def _row6(self, row: int):
+        """Discos de una fila RAID 6: (P, Q, [discos de datos en orden k])."""
+        n = self.n
+        p = self._parity_disk(row, n)
+        q = (p + 1) % n
+        if self.layout.endswith("asymmetric"):
+            data = [x for x in range(n) if x not in (p, q)]
+        else:
+            data = [(p + 2 + k) % n for k in range(n - 2)]
+        return p, q, data
+
+    def _read6(self, stripe_no: int, inner: int, ln: int) -> bytes:
+        row, k = divmod(stripe_no, self.n - 2)
+        p, q, data = self._row6(row)
+        off = row * self.stripe + inner
+        d = data[k]
+        own = self._member_read(d, off, ln)
+        if own is not None:
+            return own
+        blocks = [self._member_read(x, off, ln) for x in data]
+        P = self._member_read(p, off, ln)
+        Q = self._member_read(q, off, ln)
+        lost = [i for i, b in enumerate(blocks) if b is None]
+        if len(lost) == 1 and P is not None:
+            return xor_bytes([P] + [b for b in blocks if b is not None])
+        if len(lost) == 1 and Q is not None:
+            # Dx = (Q ^ Σ g^i Di) · g^-x
+            partial = xor_bytes([Q] + [gf_scale(b, gf_pow2(i)) for i, b in enumerate(blocks) if b is not None])
+            return gf_scale(partial, gf_inv(gf_pow2(k)))
+        if len(lost) == 2 and P is not None and Q is not None:
+            x, y = lost
+            pxy = xor_bytes([P] + [b for b in blocks if b is not None])
+            qxy = xor_bytes([Q] + [gf_scale(b, gf_pow2(i)) for i, b in enumerate(blocks) if b is not None])
+            gyx = gf_pow2(y - x)
+            den = gf_inv(gyx ^ 1)
+            a = gf_mul(gyx, den)
+            b = gf_mul(gf_inv(gf_pow2(x)), den)
+            dx = xor_bytes([gf_scale(pxy, a), gf_scale(qxy, b)])
+            return dx if k == x else xor_bytes([pxy, dx])
+        return b"\0" * ln
+
     def _read_stripe_unit(self, stripe_no: int, inner: int, ln: int) -> bytes:
+        if self.level == "6":
+            return self._read6(stripe_no, inner, ln)
         d, row, group = self._locate(stripe_no)
         off = row * self.stripe + inner
         data = self._member_read(d, off, ln)

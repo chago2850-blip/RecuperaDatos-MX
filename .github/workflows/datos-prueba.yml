@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   linux:
+    if: ${{ !contains(github.event.head_commit.message, '[sin-linux]') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +72,9 @@ jobs:
           hdiutil attach -nobrowse $O/apfs.dmg
           fill /Volumes/PruebaAPFS
           C=$(diskutil info -plist /Volumes/PruebaAPFS | plutil -extract APFSContainerReference raw -)
-          diskutil apfs addVolume $C APFS Secreto -passphrase clave123 || echo "::warning::no se pudo crear el volumen cifrado"
+          echo "::warning::contenedor=$C"
+          OUT=$(diskutil apfs addVolume "$C" APFS Secreto -passphrase clave123 2>&1); echo "$OUT"
+          echo "::warning::addVolume: $(echo $OUT | tr '\n' ' ' | cut -c1-600)"
           sleep 3; ls /Volumes
           [ -d /Volumes/Secreto ] && fill /Volumes/Secreto
           diskutil apfs list > $O/apfs_list.txt || true
@@ -100,8 +103,10 @@ jobs:
       - name: Crear imágenes ReFS y BitLocker
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Continue"
           $O = "$env:RUNNER_TEMP\win"; New-Item -ItemType Directory -Force $O | Out-Null
           python tests/make_samples.py $O
+          function W($m) { Write-Output "::warning::$m" }
           function Fill($root) {
             New-Item -ItemType Directory -Force "$root\Documentos\Sub" | Out-Null
             Get-ChildItem "$O\muestras" | ForEach-Object {
@@ -109,26 +114,39 @@ jobs:
             Start-Sleep 2
             Remove-Item "$root\Documentos\Sub\foto_1.jpg","$root\Documentos\informe.pdf","$root\Documentos\Carta muy larga para la abuela.docx","$root\Documentos\grafico.png"
             Start-Sleep 2
+            W ("Contenido de ${root}: " + ((Get-ChildItem -Recurse $root | Select-Object -ExpandProperty Name) -join ", "))
           }
-          function MakeVhd($path, $size, $fs, $letter) {
-            "create vdisk file=`"$path`" maximum=$size type=fixed`nselect vdisk file=`"$path`"`nattach vdisk`ncreate partition primary`nformat fs=$fs quick label=Prueba`nassign letter=$letter" | Set-Content "$O\dp.txt"
-            diskpart /s "$O\dp.txt"
+          function MakeVhd($path, $sizeMB, $fs, $letter) {
+            "create vdisk file=`"$path`" maximum=$sizeMB type=fixed`nselect vdisk file=`"$path`"`nattach vdisk" | Set-Content "$O\dp.txt"
+            $r = diskpart /s "$O\dp.txt" | Out-String; W ("diskpart: " + ($r -replace "`r?`n"," ").Substring(0, [Math]::Min(300, $r.Length)))
+            $disk = Get-DiskImage -ImagePath $path | Get-Disk
+            Initialize-Disk -Number $disk.Number -PartitionStyle GPT -ErrorAction SilentlyContinue
+            $part = New-Partition -DiskNumber $disk.Number -UseMaximumSize -DriveLetter $letter
+            try { Format-Volume -DriveLetter $letter -FileSystem $fs -NewFileSystemLabel Prueba -Confirm:$false -ErrorAction Stop | Out-Null; W "Formateado $fs en ${letter}:" }
+            catch { W "Format-Volume $fs falló: $_" }
           }
-          function Detach($path) { "select vdisk file=`"$path`"`ndetach vdisk" | Set-Content "$O\dp2.txt"; diskpart /s "$O\dp2.txt" }
-          MakeVhd "$O\refs.vhd" 2048 refs R
-          Fill "R:"; Detach "$O\refs.vhd"
-          MakeVhd "$O\bitlocker.vhd" 512 ntfs B
+          function Detach($path) { Dismount-DiskImage -ImagePath $path | Out-Null }
+          MakeVhd "$O\refs.vhd" 2048 ReFS R
+          if (Test-Path "R:\") { Fill "R:" }
+          Detach "$O\refs.vhd"
+          MakeVhd "$O\bitlocker.vhd" 512 NTFS B
+          W ("Funciones BitLocker: " + ((Get-WindowsFeature *BitLocker* | ForEach-Object { "$($_.Name)=$($_.InstallState)" }) -join ", "))
           try {
             $pw = ConvertTo-SecureString "Clave12345!" -AsPlainText -Force
-            Enable-BitLocker -MountPoint "B:" -PasswordProtector -Password $pw -EncryptionMethod XtsAes128 -UsedSpaceOnly -SkipHardwareTest
-            $rp = Add-BitLockerKeyProtector -MountPoint "B:" -RecoveryPasswordProtector
-            (Get-BitLockerVolume B:).KeyProtector | Out-String | Set-Content "$O\bitlocker_claves.txt"
-            do { Start-Sleep 2; $v = Get-BitLockerVolume B: } while ($v.EncryptionPercentage -lt 100)
+            Enable-BitLocker -MountPoint "B:" -PasswordProtector -Password $pw -EncryptionMethod XtsAes128 -UsedSpaceOnly -SkipHardwareTest -ErrorAction Stop | Out-Null
+            Add-BitLockerKeyProtector -MountPoint "B:" -RecoveryPasswordProtector -ErrorAction Stop | Out-Null
+            $kp = (Get-BitLockerVolume B:).KeyProtector | Out-String
+            $kp | Set-Content "$O\bitlocker_claves.txt"; W ("Protectores: " + ($kp -replace "`r?`n"," "))
+            $t = 0; do { Start-Sleep 2; $t++; $v = Get-BitLockerVolume B: } while ($v.EncryptionPercentage -lt 100 -and $t -lt 150)
             Fill "B:"
-          } catch { Write-Output "::warning::BitLocker no disponible: $_"; manage-bde -status | Out-String | Set-Content "$O\bitlocker_claves.txt" }
+          } catch {
+            W "Enable-BitLocker falló: $_"
+            $m = manage-bde -on B: -pw -rp -used -em xts_aes128 2>&1 | Out-String; W ("manage-bde: " + ($m -replace "`r?`n"," "))
+            "sin bitlocker" | Set-Content "$O\bitlocker_claves.txt"
+          }
           Detach "$O\bitlocker.vhd"
-          Get-ChildItem $O
-          Compress-Archive -Path "$O\refs.vhd","$O\bitlocker.vhd","$O\bitlocker_claves.txt","$O\hashes.txt" -DestinationPath "$env:RUNNER_TEMP\datos-windows.zip"
+          Get-ChildItem $O | ForEach-Object { W "$($_.Name) $($_.Length)" }
+          Compress-Archive -Path "$O\refs.vhd","$O\bitlocker.vhd","$O\bitlocker_claves.txt","$O\hashes.txt" -DestinationPath "$env:RUNNER_TEMP\datos-windows.zip" -CompressionLevel Optimal
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: datos-prueba-windows

@@ -324,6 +324,9 @@ class VHDSource(BlockSource):
 def open_image(path: str) -> BlockSource:
     """Abre una imagen según su extensión/contenido."""
     low = path.lower()
+    from .ewf import EWFSource, is_ewf
+    if is_ewf(path):
+        return EWFSource(path)
     if re.search(r"\.(00)?1$", low) and os.path.exists(path):
         base = os.path.splitext(path)[0]
         if os.path.exists(base + ".002") or os.path.exists(base + ".02"):
