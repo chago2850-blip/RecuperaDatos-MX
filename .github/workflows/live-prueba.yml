@@ -26,3 +26,9 @@ jobs:
           prerelease: true
           name: Prueba ISO live
           files: /tmp/RecuperaDatos-MX-prueba-live-amd64.iso
+      - if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: datos-prueba-live
+          prerelease: true
+          files: /tmp/lb.log
