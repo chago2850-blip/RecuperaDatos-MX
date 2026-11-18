@@ -17,7 +17,7 @@ jobs:
       - run: apt-get update -qq && apt-get install -y -qq live-build curl ca-certificates git xorriso
       - uses: actions/checkout@v4
       - run: curl -sSL -o /tmp/rd.deb https://github.com/chago2850-blip/RecuperaDatos-MX/releases/download/v1.0.0/recuperadatos-mx_1.0.0_amd64.deb
-      - run: sh packaging/live/build-live.sh /tmp/rd.deb prueba 2>&1 | tail -40
+      - run: sh packaging/live/build-live.sh /tmp/rd.deb prueba > /tmp/lb.log 2>&1 || (tail -40 /tmp/lb.log | sed 's/^/::warning::/'; exit 1)
       - run: ls -la /tmp/*.iso && echo "::warning::ISO $(stat -c %s /tmp/RecuperaDatos-MX-prueba-live-amd64.iso) bytes"
       - uses: softprops/action-gh-release@v2
         with:

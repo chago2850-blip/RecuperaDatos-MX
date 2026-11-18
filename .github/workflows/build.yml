@@ -118,7 +118,7 @@ jobs:
         id: ver
         run: echo "v=$(python3 -c 'import recuperadatos_mx as r; print(r.__version__)')" >> "$GITHUB_OUTPUT"
       - name: Construir ISO live
-        run: sh packaging/live/build-live.sh deb/recuperadatos-mx_${{ steps.ver.outputs.v }}_amd64.deb ${{ steps.ver.outputs.v }}
+        run: sh packaging/live/build-live.sh deb/recuperadatos-mx_${{ steps.ver.outputs.v }}_amd64.deb ${{ steps.ver.outputs.v }} > /tmp/lb.log 2>&1 || (tail -40 /tmp/lb.log | sed 's/^/::warning::/'; exit 1)
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.v }}

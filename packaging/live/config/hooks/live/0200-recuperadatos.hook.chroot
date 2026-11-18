@@ -1,8 +1,0 @@
-#!/bin/sh
-# Instala RecuperaDatos-MX (el .deb se copia en /tmp/recuperadatos-mx.deb durante la construcción)
-set -e
-if [ -f /tmp/recuperadatos-mx.deb ]; then
-    apt-get install -y /tmp/recuperadatos-mx.deb
-    rm -f /tmp/recuperadatos-mx.deb
-fi
-test -x /usr/bin/recuperadatos-mx

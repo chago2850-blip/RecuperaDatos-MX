@@ -13,8 +13,11 @@ lb config \
   --iso-publisher "Santiago Miguel" --memtest none \
   --bootappend-live "boot=live components quiet splash locales=es_MX.UTF-8 keyboard-layouts=latam timezone=America/Mexico_City"
 cp -r "$HERE/config/." config/
-mkdir -p config/includes.chroot/tmp
-cp "$DEB" config/includes.chroot/tmp/recuperadatos-mx.deb
+# paquete local: live-build lo publica en un repositorio interno y se instala por su nombre
+mkdir -p config/packages.chroot
+cp "$DEB" config/packages.chroot/
+echo "recuperadatos-mx" > config/package-lists/recuperadatos.list.chroot
 lb build
+test -f chroot/usr/bin/recuperadatos-mx || { echo "ERROR: RecuperaDatos-MX no quedó instalado en la imagen"; exit 1; }
 mv live-image-amd64.hybrid.iso "/tmp/RecuperaDatos-MX-$VER-live-amd64.iso"
 ls -la /tmp/*.iso
