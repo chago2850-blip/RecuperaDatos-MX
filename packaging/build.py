@@ -66,6 +66,16 @@ Keywords=recuperar;datos;undelete;particiones;raid;forense;
 StartupWMClass={NAME}
 """
 
+DESKTOP_ADMIN = f"""[Desktop Entry]
+Type=Application
+Name={NAME} (administrador)
+Comment=Abrir RecuperaDatos-MX con acceso directo a los discos
+Exec=pkexec /opt/{PKG}/{NAME} gui
+Icon={PKG}
+Terminal=false
+Categories=System;Utility;Filesystem;
+"""
+
 POLKIT = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
@@ -94,6 +104,7 @@ def stage_linux(app_dir: str) -> str:
     apps = os.path.join(root, "usr", "share", "applications")
     os.makedirs(apps)
     open(os.path.join(apps, f"{PKG}.desktop"), "w").write(DESKTOP)
+    open(os.path.join(apps, f"{PKG}-admin.desktop"), "w").write(DESKTOP_ADMIN)
     for s in (16, 24, 32, 48, 64, 128, 256, 512):
         d = os.path.join(root, "usr", "share", "icons", "hicolor", f"{s}x{s}", "apps")
         os.makedirs(d)
@@ -184,6 +195,7 @@ gtk-update-icon-cache -q /usr/share/icons/hicolor >/dev/null 2>&1 || true
 /opt/{PKG}
 /usr/bin/{PKG}
 /usr/share/applications/{PKG}.desktop
+/usr/share/applications/{PKG}-admin.desktop
 /usr/share/icons/hicolor/*/apps/{PKG}.png
 /usr/share/polkit-1/actions/mx.recuperadatos.policy
 /usr/share/doc/{PKG}

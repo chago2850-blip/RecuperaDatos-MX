@@ -149,6 +149,18 @@ def cmd_boveda(a):
         print(f"{e.full_path}  ({e.size} bytes, {e.note})")
 
 
+def cmd_pedir_clave(a):
+    """Diálogo de contraseña para sudo (SUDO_ASKPASS): imprime la contraseña en la salida estándar."""
+    from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit
+    app = QApplication([])
+    pw, ok = QInputDialog.getText(None, "RecuperaDatos-MX",
+                                  "Para leer los discos directamente se necesitan privilegios de administrador.\n"
+                                  "Escriba su contraseña de usuario:", QLineEdit.Password)
+    if not ok:
+        sys.exit(1)
+    sys.stdout.write(pw + "\n")
+
+
 def cmd_gui(a):
     from .gui.app import main
     main()
@@ -219,6 +231,7 @@ def main(argv=None):
     s.add_argument("--intervalo", type=int, default=600)
     s.set_defaults(fn=cmd_boveda)
     sub.add_parser("gui", help="Abrir la interfaz gráfica").set_defaults(fn=cmd_gui)
+    sub.add_parser("pedir-clave", help=argparse.SUPPRESS).set_defaults(fn=cmd_pedir_clave)
     a = p.parse_args(argv)
     if not getattr(a, "fn", None):
         return cmd_gui(a)

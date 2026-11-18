@@ -5,9 +5,10 @@ from __future__ import annotations
 import datetime
 import os
 import sys
+import tempfile
 import threading
 import traceback
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from PySide6.QtCore import QObject, QThread, Qt, Signal
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel,
@@ -198,27 +199,128 @@ def open_source(p: str, writable: bool = False) -> BlockSource:
     return open_image(p)
 
 
-def restart_as_admin() -> bool:
-    """Vuelve a lanzar la aplicación con privilegios de administrador."""
-    import subprocess
+OPT_EXE = "/opt/recuperadatos-mx/RecuperaDatos-MX"
+
+
+def _linux_gui_env() -> List[str]:
+    """Variables para que la app ejecutada como root pueda abrir su ventana (X11 o Wayland vía XWayland)."""
+    xauth = os.environ.get("XAUTHORITY") or os.path.expanduser("~/.Xauthority")
+    if not os.path.exists(xauth):
+        rt = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+        try:
+            cands = [os.path.join(rt, f) for f in os.listdir(rt) if "auth" in f.lower()]
+            xauth = cands[0] if cands else xauth
+        except OSError:
+            pass
+    return [f"DISPLAY={os.environ.get('DISPLAY', ':0')}", f"XAUTHORITY={xauth}", "QT_QPA_PLATFORM=xcb",
+            "XDG_RUNTIME_DIR=/tmp/runtime-root", f"LANG={os.environ.get('LANG', 'es_MX.UTF-8')}",
+            f"RECUPERADATOS_USUARIO={os.environ.get('USER', '')}"]
+
+
+def elevation_command() -> Optional[List[str]]:
+    """Comando que relanza la app con privilegios (Linux/macOS); None si no hay forma."""
+    import shutil
+    frozen = getattr(sys, "frozen", False)
+    exe = sys.executable
+    args = [] if frozen else ["-m", "recuperadatos_mx"]
+    if sys.platform == "darwin":
+        cmd = " ".join([f"'{exe}'"] + [f"'{a}'" for a in args] + ["gui"])
+        return ["osascript", "-e", f'do shell script "{cmd} &> /dev/null &" with administrator privileges']
+    if shutil.which("pkexec"):
+        return ["pkexec", "env", *_linux_gui_env(), exe, *args, "gui"]
+    return None
+
+
+def sudo_askpass_command() -> Optional[List[str]]:
+    """Alternativa sin agente de polkit: sudo con un diálogo de contraseña propio (SUDO_ASKPASS)."""
+    import shutil
+    import stat
+    if not shutil.which("sudo"):
+        return None
     exe = sys.executable
     args = [] if getattr(sys, "frozen", False) else ["-m", "recuperadatos_mx"]
-    try:
-        if sys.platform == "win32":
+    helper = os.path.join(tempfile.gettempdir(), f"recuperadatos-askpass-{os.getuid()}.sh")
+    with open(helper, "w") as fh:
+        quoted = " ".join(f"'{a}'" for a in [exe, *args])
+        fh.write(f"#!/bin/sh\nexec {quoted} pedir-clave\n")
+    os.chmod(helper, stat.S_IRWXU)
+    return ["sudo", "-A", "env", *_linux_gui_env(), exe, *args, "gui"], helper
+
+
+def restart_as_admin(window=None) -> bool:
+    """Vuelve a lanzar la aplicación con privilegios de administrador.
+
+    En Linux y macOS la ventana actual se oculta y el proceso sigue vivo mientras
+    se pide la contraseña: pkexec se niega a funcionar si su proceso padre ya
+    terminó.  Si se cancela, la ventana vuelve a mostrarse."""
+    import subprocess
+    if sys.platform == "win32":
+        try:
             import ctypes
+            args = [] if getattr(sys, "frozen", False) else ["-m", "recuperadatos_mx"]
             params = " ".join(f'"{a}"' for a in args + ["gui"])
-            r = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1)
+            r = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
+            if r > 32 and window is not None:
+                window.close()
             return r > 32
-        if sys.platform == "darwin":
-            cmd = " ".join([f"'{exe}'"] + [f"'{a}'" for a in args] + ["gui"])
-            subprocess.Popen(["osascript", "-e", f'do shell script "{cmd} &> /dev/null &" with administrator privileges'])
-            return True
-        env = [f"DISPLAY={os.environ.get('DISPLAY', ':0')}",
-               f"XAUTHORITY={os.environ.get('XAUTHORITY', os.path.expanduser('~/.Xauthority'))}"]
-        if os.environ.get("WAYLAND_DISPLAY"):
-            env += [f"WAYLAND_DISPLAY={os.environ['WAYLAND_DISPLAY']}",
-                    f"XDG_RUNTIME_DIR={os.environ.get('XDG_RUNTIME_DIR', '')}"]
-        subprocess.Popen(["pkexec", "env", *env, exe, *args, "gui"])
-        return True
-    except Exception:
+        except Exception:
+            return False
+    attempts = []
+    cmd = elevation_command()
+    if cmd:
+        attempts.append((cmd, {}))
+    if sys.platform.startswith("linux"):
+        alt = sudo_askpass_command()
+        if alt:
+            attempts.append((alt[0], {"SUDO_ASKPASS": alt[1]}))
+    if not attempts:
         return False
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
+    state = {"i": 0, "proc": None, "t0": 0.0}
+
+    def launch() -> bool:
+        import time
+        while state["i"] < len(attempts):
+            c, extra = attempts[state["i"]]
+            state["i"] += 1
+            try:
+                state["proc"] = subprocess.Popen(c, env=dict(os.environ, **extra), stdin=subprocess.DEVNULL,
+                                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                state["t0"] = time.time()
+                return True
+            except OSError:
+                continue
+        return False
+
+    if not launch():
+        return False
+    if window is not None:
+        window.hide()
+    timer = QTimer(window)
+
+    def poll() -> None:
+        import time
+        p = state["proc"]
+        rc = p.poll()
+        if rc is None:
+            return
+        err = (p.stderr.read() or b"").decode("utf-8", "replace") if p.stderr else ""
+        quick = time.time() - state["t0"] < 8
+        if rc == 0:
+            timer.stop()
+            QApplication.instance().quit()  # la copia con privilegios ya se usó y se cerró
+            return
+        if quick and rc != 0 and ("agent" in err.lower() or rc == 127 and "dismissed" not in err.lower()) \
+                and launch():
+            return  # sin agente de polkit: intentar con sudo y el diálogo propio
+        timer.stop()
+        if window is not None:
+            window.show()
+            if rc not in (0, 126):
+                error(window, "No se pudieron obtener privilegios de administrador.\n\n" + err[-600:] +
+                      "\n\nTambién puede abrir una terminal y ejecutar:\n  sudo recuperadatos-mx")
+
+    timer.timeout.connect(poll)
+    timer.start(400)
+    return True

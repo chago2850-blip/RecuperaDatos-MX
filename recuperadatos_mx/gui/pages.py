@@ -140,9 +140,7 @@ class HomePage(QWidget):
         self.refresh()
 
     def elevate(self) -> None:
-        if restart_as_admin():
-            self.main.close()
-        else:
+        if not restart_as_admin(self.main):
             error(self, "No se pudo solicitar privilegios. Ejecute la aplicación como administrador / con sudo.")
 
     def refresh(self) -> None:
