@@ -1,0 +1,17 @@
+name: Diagnóstico de pruebas
+on:
+  push:
+    branches: [diag]
+jobs:
+  pruebas:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg ewf-tools && pip install -r requirements.txt pytest
+      - run: python tests/get_test_data.py /tmp/dp
+      - run: |
+          QT_QPA_PLATFORM=offscreen RD_DATOS=/tmp/dp python -m pytest -q tests -rf -p no:cacheprovider > /tmp/t.log 2>&1 || true
+          grep -E "FAILED|Error|assert" /tmp/t.log | head -30 | sed 's/^/::warning::/'
+          tail -3 /tmp/t.log | sed 's/^/::warning::/'
