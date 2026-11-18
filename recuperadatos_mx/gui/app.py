@@ -26,7 +26,7 @@ NAV = [
     ("salud", "Salud S.M.A.R.T.", "health", "Estado de salud, temperatura y alertas de discos y SSD"),
     ("reparar", "Reparar archivos", "repair", "Reparar fotos JPEG, PDF y documentos de Office/ZIP dañados"),
     ("boveda", "Bóveda", "vault", "Protección preventiva de carpetas importantes"),
-    ("red", "Recuperación por red", "network", "Recuperar datos de otra computadora de la red"),
+    ("red", "Por red", "network", "Recuperar datos de otra computadora de la red"),
     ("moviles", "Teléfonos", "phone", "iPhone/iPad (respaldos, incluso cifrados), Android por USB y mensajes borrados"),
     ("arranque", "Medio de arranque", "usb", "Crear una memoria USB de arranque para equipos que no inician"),
     ("firmas", "Tipos de archivo", "signature", "Firmas del escaneo profundo y firmas personalizadas"),
@@ -43,6 +43,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{__app_name__} {__version__}")
         self.setWindowIcon(QIcon(os.path.join(ASSETS, "logo.png")))
         self.resize(1360, 860)
+        self.setMinimumSize(980, 640)
         root = QWidget()
         root.setObjectName("Root")
         h = QHBoxLayout(root)
@@ -164,7 +165,11 @@ def main(argv=None) -> None:
     if sys.platform.startswith("linux"):
         app.setDesktopFileName("recuperadatos-mx")
     w = MainWindow()
-    w.show()
+    geo = app.primaryScreen().availableGeometry() if app.primaryScreen() else None
+    if geo is not None and (geo.width() < 1440 or geo.height() < 900):
+        w.showMaximized()  # pantallas pequeñas (laptops, modo live): usar todo el espacio
+    else:
+        w.show()
     for a in (argv or sys.argv)[1:]:
         if os.path.isfile(a):
             w.home.add_image(a)
