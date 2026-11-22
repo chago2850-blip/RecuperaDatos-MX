@@ -1,7 +1,7 @@
 """Construye el ejecutable con PyInstaller y los instaladores de la plataforma actual.
 
   python packaging/build.py            -> dist/ con el ejecutable + instaladores
-  Linux:   .deb, .rpm y .tar.gz
+  Linux:   .deb, .rpm y .tar.gz (con libpcre3 compilada desde el código fuente e integrada)
   Windows: instalador .exe (Inno Setup) y .zip portátil
   macOS:   .dmg con RecuperaDatos-MX.app
 """
@@ -50,6 +50,39 @@ def pyinstaller() -> str:
     run(*args)
     out = os.path.join(ROOT, "build", "pyi-dist", NAME + (".app" if sys.platform == "darwin" else ""))
     return out
+
+
+# --------------------------------------------------------------------------- #
+# libpcre3 propia: se compila desde packaging/linux/pcre3 (PCRE 8.39 + parches de
+# seguridad de Ubuntu) y se mete dentro del ejecutable, así la app ya no depende del
+# paquete libpcre3 del sistema (retirado en Debian 13, Ubuntu 25.04+ y derivadas).
+PCRE_DIR = os.path.join(ROOT, "packaging", "linux", "pcre3")
+PCRE_LIBS = ("libpcre.so.3", "libpcreposix.so.3")
+
+
+def compile_pcre3() -> str:
+    out = os.path.join(ROOT, "build", "pcre3")
+    run("sh", os.path.join(PCRE_DIR, "compilar-pcre3.sh"), out)
+    return os.path.join(out, "lib")
+
+
+def bundle_pcre3(app_dir: str) -> None:
+    """Copia la libpcre3 compilada junto a las demás bibliotecas del ejecutable.
+
+    El cargador de PyInstaller pone esa carpeta (``_internal``) en LD_LIBRARY_PATH,
+    así que Qt/GLib encuentran esta copia antes que (o en lugar de) la del sistema."""
+    libdir = compile_pcre3()
+    internal = os.path.join(app_dir, "_internal")
+    dest = internal if os.path.isdir(internal) else app_dir
+    for lib in PCRE_LIBS:
+        target = os.path.join(dest, lib)
+        if os.path.lexists(target):  # PyInstaller pudo haber copiado la del sistema
+            os.remove(target)
+        shutil.copy2(os.path.join(libdir, lib), target)
+        print(f"  libpcre3 integrada: {target}")
+    lic = os.path.join(dest, "licencias")
+    os.makedirs(lic, exist_ok=True)
+    shutil.copy(os.path.join(PCRE_DIR, "copyright"), os.path.join(lic, "PCRE-8.39.txt"))
 
 
 # --------------------------------------------------------------------------- #
@@ -139,7 +172,7 @@ def build_deb(root: str) -> str:
             f"Maintainer: Santiago Miguel <chago2850@gmail.com>\nInstalled-Size: {du_kb(deb_root)}\n"
             "Depends: libc6, libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libfontconfig1, libdbus-1-3, "
             "libxcb-cursor0, libxcb-icccm4, libxcb-keysyms1, libxcb-image0, libxcb-render-util0, libxcb-xkb1, "
-            "libxcb-randr0, libxcb-shape0, libxcb-xinerama0, libpcre3\n"
+            "libxcb-randr0, libxcb-shape0, libxcb-xinerama0\n"
             "Recommends: smartmontools, policykit-1 | pkexec\n"
             "Homepage: https://github.com/chago2850-blip/RecuperaDatos-MX\n"
             "Description: Recuperación de datos libre y multiplataforma\n"
@@ -244,7 +277,17 @@ def build_macos(app: str) -> str:
     os.makedirs(stage)
     run("cp", "-R", app, stage)
     os.symlink("/Applications", os.path.join(stage, "Aplicaciones"))
-    run("hdiutil", "create", "-volname", NAME, "-srcfolder", stage, "-ov", "-format", "UDZO", out)
+    # hdiutil falla a veces con "Resource busy" (XProtect/Spotlight escaneando): reintentar
+    import time
+    for intento in range(1, 6):
+        try:
+            run("hdiutil", "create", "-volname", NAME, "-srcfolder", stage, "-ov", "-format", "UDZO", out)
+            break
+        except subprocess.CalledProcessError:
+            if intento == 5:
+                raise
+            print(f"hdiutil ocupado, reintento {intento}/4…")
+            time.sleep(10 * intento)
     return out
 
 
@@ -253,6 +296,7 @@ def main() -> None:
     app = pyinstaller()
     outs = []
     if sys.platform.startswith("linux"):
+        bundle_pcre3(app)
         root = stage_linux(app)
         outs += [build_deb(root), build_rpm(root), build_tar(app)]
     elif sys.platform == "win32":

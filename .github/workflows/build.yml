@@ -60,6 +60,17 @@ jobs:
       - name: Prueba del ejecutable (Linux)
         if: runner.os == 'Linux'
         run: build/pyi-dist/RecuperaDatos-MX/RecuperaDatos-MX --version
+      - name: libpcre3 integrada (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          readelf -d build/pyi-dist/RecuperaDatos-MX/_internal/libpcre.so.3 | grep -q 'SONAME.*libpcre.so.3'
+          ! dpkg-deb -f dist/*.deb Depends | grep -q libpcre3
+          # Debian 13 ya no tiene el paquete libpcre3: el .deb debe instalarse y arrancar igual
+          docker run --rm -v "$PWD/dist:/dist" debian:trixie sh -c '
+            apt-get update -qq && apt-get install -y -qq /dist/*.deb >/dev/null &&
+            ! dpkg -l libpcre3 2>/dev/null | grep -q ^ii &&
+            recuperadatos-mx --version'
       - uses: actions/upload-artifact@v4
         with:
           name: instaladores-${{ matrix.os }}
