@@ -277,7 +277,17 @@ def build_macos(app: str) -> str:
     os.makedirs(stage)
     run("cp", "-R", app, stage)
     os.symlink("/Applications", os.path.join(stage, "Aplicaciones"))
-    run("hdiutil", "create", "-volname", NAME, "-srcfolder", stage, "-ov", "-format", "UDZO", out)
+    # hdiutil falla a veces con "Resource busy" (XProtect/Spotlight escaneando): reintentar
+    import time
+    for intento in range(1, 6):
+        try:
+            run("hdiutil", "create", "-volname", NAME, "-srcfolder", stage, "-ov", "-format", "UDZO", out)
+            break
+        except subprocess.CalledProcessError:
+            if intento == 5:
+                raise
+            print(f"hdiutil ocupado, reintento {intento}/4…")
+            time.sleep(10 * intento)
     return out
 
 
